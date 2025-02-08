@@ -4,6 +4,7 @@
 
 import asyncio
 import os
+import subprocess
 
 from dotenv import load_dotenv
 import logging
@@ -15,7 +16,7 @@ from deepgram import (
 
 load_dotenv()
 
-SPEAK_TEXT = {"text": "It is a very pleasant that I can speak with you finally )"}
+SPEAK_TEXT = {"text": "It is - a very pleasant that I can speak with you finaly ) "}
 filename = "data/audio_output/test.mp3"
 
 
@@ -28,7 +29,8 @@ async def main():
         response = await deepgram.speak.asyncrest.v("1").save(
             filename, SPEAK_TEXT
         )
-        print(response.to_json(indent=4))
+
+        subprocess.run('afplay ' + filename, shell=True)
 
     except Exception as e:
         print(f"Exception: {e}")
