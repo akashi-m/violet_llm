@@ -1,40 +1,50 @@
-# Copyright 2024 Deepgram SDK contributors. All Rights Reserved.
-# Use of this source code is governed by a MIT license that can be found in the LICENSE file.
-# SPDX-License-Identifier: MIT
-
-import asyncio
 import os
-import subprocess
-
+from deepgram import DeepgramClient, PrerecordedOptions
 from dotenv import load_dotenv
-import logging
-from deepgram.utils import verboselogs
 
-from deepgram import (
-    DeepgramClient
-)
-
+# Load environment variables
 load_dotenv()
 
-SPEAK_TEXT = {"text": "It is - a very pleasant that I can speak with you finaly ) "}
-filename = "data/audio_output/test.mp3"
+# Initialize the Deepgram client
+dg_client = DeepgramClient(os.getenv('DEEPGRAM_API_KEY'))
 
+def transcribe_wav_file(file_path):
+    """
+    Transcribes a WAV file using Deepgram's API.
 
-async def main():
+    Args:
+        file_path (str): Path to the WAV file.
+
+    Returns:
+        str: Transcribed text from the WAV file.
+    """
     try:
-        print("Connecting to Deepgram...")
-        # Инициализация клиента
-        deepgram = DeepgramClient(os.getenv("DEEPGRAM_API_KEY"))
+        # Open the audio file
+        with open(file_path, 'rb') as audio:
+            # Set options for transcription
+            options = PrerecordedOptions(
+                smart_format=True,  # Enable smart formatting for better readability
+                model="nova-2",       # Use Deepgram's latest model
+            )
 
-        response = await deepgram.speak.asyncrest.v("1").save(
-            filename, SPEAK_TEXT
-        )
-
-        subprocess.run('afplay ' + filename, shell=True)
+            # Send the audio file to Deepgram for transcription
+            response = dg_client.listen.prerecorded.v('1').transcribe_file(
+                {'buffer': audio}, options
+            )
+            print(response)
+            # Extract the transcript from the response
+            transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
+            return transcript
 
     except Exception as e:
-        print(f"Exception: {e}")
+        print(f"An error occurred: {e}")
+        return None
 
-# Ваш текущий код работает нормально
+# Example usage
 if __name__ == "__main__":
-    asyncio.run(main())
+    file_path = 'recordings/record.wav'
+    transcript = transcribe_wav_file(file_path)
+    if transcript:
+        print("Transcription:", transcript)
+    else:
+        print("Failed to transcribe the audio.")
