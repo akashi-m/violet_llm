@@ -1,6 +1,7 @@
 from llama_cpp import Llama
 import os
 import time
+import json
 
 
 class PerfectVAssistant:
@@ -22,7 +23,39 @@ class PerfectVAssistant:
             tensor_split=[0]
         )
         self.context = []
+        self.history_file = "chat_history.json"
+        self.load_history()
         print("✓ Система готова!")
+
+
+    def load_history(self):
+        """Загрузка истории чата из файла"""
+        try:
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    self.context = json.load(f)
+                print("История чата загружена")
+        except Exception as e:
+            print(f"Ошибка загрузки истории: {e}")
+            self.context = []
+
+    def save_history(self):
+        """Сохранение истории чата в файл"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.context, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения истории: {e}")
+
+    def format_history(self) -> str:
+        """Форматирование истории для контекста"""
+        history = ""
+        # Берём последние 5 обменов для контекста
+        recent_history = self.context[-5:] if self.context else []
+        for exchange in recent_history:
+            history += f"Пользователь: {exchange['user']}\n"
+            history += f"Ассистент: {exchange['assistant']}\n"
+        return history
 
     def get_response(self, user_input: str) -> str:
         # Добавляем ввод пользователя в контекст
@@ -90,6 +123,7 @@ def main():
     while True:
         user_input = input("\nВы: ").strip()
         if user_input.lower() == 'exit':
+            assistant.save_history()
             print("До свидания! *элегантно раскланивается*")
             break
         if user_input:
