@@ -1,14 +1,11 @@
 import torch
-import soundfile as sf
-import subprocess
-import tempfile
-import os
+import sounddevice as sd
 import ssl
 from omegaconf import OmegaConf
 
 class TTSPlayer:
     def __init__(self, speaker="kseniya", sample_rate=48000, put_accent=True, put_yo=True):
-        # Отключаем проверку SSL (фиксим ошибку)
+        # Отключаем проверку SSL (исправляет ошибку)
         ssl._create_default_https_context = ssl._create_unverified_context
 
         # Скачиваем файл модели
@@ -36,26 +33,15 @@ class TTSPlayer:
         self.put_yo = put_yo
 
     def say(self, text):
-        """Озвучивает текст и воспроизводит его."""
+        """Озвучивает текст и моментально воспроизводит его."""
         audio = self.model.apply_tts(text=text, speaker=self.speaker,
                                      sample_rate=self.sample_rate,
                                      put_accent=self.put_accent, put_yo=self.put_yo)
 
-        # Создаем временный WAV-файл
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmpfile:
-            filename = tmpfile.name
-            sf.write(filename, audio, self.sample_rate)
-
-        # Воспроизводим аудио
-        if os.name == "posix":
-            subprocess.run(f"afplay {filename}", shell=True)  # macOS
-            # subprocess.run(f"aplay {filename}", shell=True)  # Linux
-        else:
-            subprocess.run(f"start {filename}", shell=True)  # Windows
-
-        # Удаляем временный файл
-        os.remove(filename)
+        # Воспроизводим звук напрямую из памяти
+        sd.play(audio, self.sample_rate)
+        sd.wait()  # Ждем окончания воспроизведения
 
 # 🔥 Использование
 tts = TTSPlayer()
-tts.say("Теперь звук должен воспроизводиться нормально! Без искажений и на комфортной громкости.")
+tts.say("Теперь звук должен воспроизводиться моментально, без задержек!")

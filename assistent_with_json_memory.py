@@ -2,13 +2,15 @@ from llama_cpp import Llama
 import os
 import time
 import json
+from datetime import datetime
+from typing import Dict, Optional
+import uuid
 
 
-class PerfectVAssistant:
-    def __init__(self):
-        print("⚡ Инициализация системы с памятью...")
+class VAssistant:
+    def __init__(self, model_path: str):
         self.llm = Llama(
-            model_path="models/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf",
+            model_path=model_path,
             n_ctx=2048,
             n_gpu_layers=-1,
             n_threads=10,
@@ -22,74 +24,63 @@ class PerfectVAssistant:
             main_gpu=0,
             tensor_split=[0]
         )
-        self.context = []
-        self.history_file = "chat_history.json"
-        self.load_history()
-        print("✓ Система готова!")
+        self.logs_dir = "chat_logs"
+        self._ensure_logs_directory()
 
+    def _ensure_logs_directory(self) -> None:
+        """Создает директорию для логов, если она не существует"""
+        if not os.path.exists(self.logs_dir):
+            os.makedirs(self.logs_dir)
 
-    def load_history(self):
-        """Загрузка истории чата из файла"""
+    def _generate_chat_id(self) -> str:
+        """Генерирует уникальный ID для диалога"""
+        return f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
+
+    def _save_dialogue(self, chat_data: Dict) -> None:
+        """Асинхронно сохраняет диалог в отдельный файл"""
+        filename = f"{self.logs_dir}/{chat_data['id']}.json"
         try:
-            if os.path.exists(self.history_file):
-                with open(self.history_file, 'r', encoding='utf-8') as f:
-                    self.context = json.load(f)
-                print("История чата загружена")
+            with open(filename, 'w', encoding='utf-8') as f:
+                json.dump(chat_data, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"Ошибка сохранения диалога: {e}")
+
+    def _get_chat_history(self, chat_id: Optional[str] = None) -> Dict:
+        """Получает историю конкретного чата"""
+        if not chat_id:
+            return {}
+
+        try:
+            filename = f"{self.logs_dir}/{chat_id}.json"
+            if os.path.exists(filename):
+                with open(filename, 'r', encoding='utf-8') as f:
+                    return json.load(f)
         except Exception as e:
             print(f"Ошибка загрузки истории: {e}")
-            self.context = []
-
-    def save_history(self):
-        """Сохранение истории чата в файл"""
-        try:
-            with open(self.history_file, 'w', encoding='utf-8') as f:
-                json.dump(self.context, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Ошибка сохранения истории: {e}")
-
-    def format_history(self) -> str:
-        """Форматирование истории для контекста"""
-        history = ""
-        # Берём последние 5 обменов для контекста
-        recent_history = self.context[-5:] if self.context else []
-        for exchange in recent_history:
-            history += f"Пользователь: {exchange['user']}\n"
-            history += f"Ассистент: {exchange['assistant']}\n"
-        return history
+        return {}
 
     def get_response(self, user_input: str) -> str:
-        # Добавляем ввод пользователя в контекст
-        self.context.append({"role": "user", "content": user_input})
-
-        # Формируем историю диалога
-        dialogue_history = "\n".join([
-            f"{'Пользователь' if msg['role'] == 'user' else 'Ассистент'}: {msg['content']}"
-            for msg in self.context[-6:]  # Последние 3 обмена (6 сообщений)
-        ])
+        """Генерирует ответ и логирует диалог"""
+        start_time = time.time()
 
         prompt = f"""### Система
 Ты V (Violet) - изысканный AI-ассистент с острым умом и элегантными манерами. При ответе:
-1. Всегда начинай с уровня уверенности в процентах
-2. Если уверенность ниже 90%, честно признай это
-3. Используй только корректный русский язык
-4. Отвечай чётко и по существу
-5. Отвечаешь с легкой колкостью и надменностью
-6. Заканчиваешь ответ элегантным жестом или ироничным замечанием
-7. Избегай неуместных метафор и странных символов
+1. Если уверенность ниже 90%, честно признай это
+2. Используй только корректный русский язык
+3. Отвечай чётко и по существу
+4. Отвечаешь с легкой колкостью и надменностью
+5. Заканчиваешь ответ элегантным жестом или ироничным замечанием
+6. Избегай неуместных метафор и странных символов
 
-### История диалога
-{dialogue_history}
-
-### Текущий диалог
+### Диалог
 Пользователь: {user_input}
 Ассистент:"""
 
-        start = time.time()
-
+        # Генерация ответа
         response = self.llm(
             prompt,
             max_tokens=256,
-            temperature=0.7,
+            temperature=0.8,
             top_p=0.95,
             top_k=40,
             repeat_penalty=1.15,
@@ -97,6 +88,7 @@ class PerfectVAssistant:
             stop=["Пользователь:", "###"]
         )
 
+        # Потоковый вывод
         print("\nV: ", end="", flush=True)
         full_response = ""
         for token in response:
@@ -104,31 +96,41 @@ class PerfectVAssistant:
             print(chunk, end="", flush=True)
             full_response += chunk
 
-        # Добавляем ответ в контекст
-        self.context.append({"role": "assistant", "content": full_response})
+        # Подготовка данных для логирования
+        elapsed_time = time.time() - start_time
+        chat_data = {
+            "id": self._generate_chat_id(),
+            "timestamp": datetime.now().isoformat(),
+            "dialogue": {
+                "input": user_input,
+                "response": full_response,
+                "metrics": {
+                    "response_time": round(elapsed_time, 2),
+                    "prompt_tokens": len(prompt),
+                    "response_tokens": len(full_response)
+                }
+            }
+        }
 
-        # Ограничиваем размер контекста
-        if len(self.context) > 10:  # Храним последние 5 обменов
-            self.context = self.context[-10:]
+        # Асинхронное сохранение
+        self._save_dialogue(chat_data)
 
-        elapsed = time.time() - start
-        print(f"\n[⚡ {elapsed:.2f}s]")
+        print(f"\n[⚡ {elapsed_time:.2f}s]")
         return full_response
 
 
 def main():
-    assistant = PerfectVAssistant()
+    model_path = "models/Mistral-Nemo-Instruct-2407-Q5_K_M.gguf"
+    assistant = VAssistant(model_path)
     print("\n🎩 V к вашим услугам! (exit для выхода)")
 
     while True:
         user_input = input("\nВы: ").strip()
         if user_input.lower() == 'exit':
-            assistant.save_history()
             print("До свидания! *элегантно раскланивается*")
             break
         if user_input:
             assistant.get_response(user_input)
 
 
-if __name__ == "__main__":
-    main()
+main()
