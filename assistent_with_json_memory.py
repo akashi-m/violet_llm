@@ -1,10 +1,9 @@
 from llama_cpp import Llama
-import os
 import time
 import json
 from datetime import datetime
-from typing import Dict, Optional
-import uuid
+import os
+from typing import Dict, List
 
 
 class VAssistant:
@@ -24,40 +23,27 @@ class VAssistant:
             main_gpu=0,
             tensor_split=[0]
         )
-        self.logs_dir = "chat_logs"
-        self._ensure_logs_directory()
+        self.log_file = "dialogues.json"
+        self.dialogues: List[Dict] = []
+        self._load_dialogues()
 
-    def _ensure_logs_directory(self) -> None:
-        """Создает директорию для логов, если она не существует"""
-        if not os.path.exists(self.logs_dir):
-            os.makedirs(self.logs_dir)
-
-    def _generate_chat_id(self) -> str:
-        """Генерирует уникальный ID для диалога"""
-        return f"chat_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{str(uuid.uuid4())[:8]}"
-
-    def _save_dialogue(self, chat_data: Dict) -> None:
-        """Асинхронно сохраняет диалог в отдельный файл"""
-        filename = f"{self.logs_dir}/{chat_data['id']}.json"
+    def _load_dialogues(self) -> None:
+        """Загружает диалоги из файла"""
         try:
-            with open(filename, 'w', encoding='utf-8') as f:
-                json.dump(chat_data, f, ensure_ascii=False, indent=2)
+            if os.path.exists(self.log_file):
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    self.dialogues = json.load(f)
         except Exception as e:
-            print(f"Ошибка сохранения диалога: {e}")
+            print(f"Ошибка загрузки диалогов: {e}")
+            self.dialogues = []
 
-    def _get_chat_history(self, chat_id: Optional[str] = None) -> Dict:
-        """Получает историю конкретного чата"""
-        if not chat_id:
-            return {}
-
+    def _save_dialogues(self) -> None:
+        """Сохраняет диалоги в файл"""
         try:
-            filename = f"{self.logs_dir}/{chat_id}.json"
-            if os.path.exists(filename):
-                with open(filename, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+            with open(self.log_file, 'w', encoding='utf-8') as f:
+                json.dump(self.dialogues, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"Ошибка загрузки истории: {e}")
-        return {}
+            print(f"Ошибка сохранения диалогов: {e}")
 
     def get_response(self, user_input: str) -> str:
         """Генерирует ответ и логирует диалог"""
@@ -96,24 +82,21 @@ class VAssistant:
             print(chunk, end="", flush=True)
             full_response += chunk
 
-        # Подготовка данных для логирования
+        # Подготовка данных в формате, удобном для MongoDB
         elapsed_time = time.time() - start_time
-        chat_data = {
-            "id": self._generate_chat_id(),
+        dialogue_entry = {
             "timestamp": datetime.now().isoformat(),
-            "dialogue": {
-                "input": user_input,
-                "response": full_response,
-                "metrics": {
-                    "response_time": round(elapsed_time, 2),
-                    "prompt_tokens": len(prompt),
-                    "response_tokens": len(full_response)
-                }
+            "input": user_input,
+            "response": full_response,
+            "metrics": {
+                "response_time": round(elapsed_time, 2),
+                "tokens": len(full_response)
             }
         }
 
-        # Асинхронное сохранение
-        self._save_dialogue(chat_data)
+        # Сохранение диалога
+        self.dialogues.append(dialogue_entry)
+        self._save_dialogues()
 
         print(f"\n[⚡ {elapsed_time:.2f}s]")
         return full_response
