@@ -115,4 +115,4 @@ def main():
         if user_input:
             assistant.get_response(user_input)
 
-
+main()

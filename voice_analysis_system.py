@@ -166,9 +166,3 @@ def _calculate_similarity(self, features1: Dict, features2: Dict) -> float:
         print(f"Ошибка при вычислении схожести: {str(e)}")
         return 0.0
 
-analyzer = VoiceAnalyzer(confidence_threshold=0.85)
-files = [f"data/activation_voices/v{i}.wav" for i in range(1, 9)]
-analyzer.create_voice_profile(files)
-
-analyzer.save_profile("voice_profile.pkl")
-analyzer.visualize_profile("voice_profile_analysis.png")
